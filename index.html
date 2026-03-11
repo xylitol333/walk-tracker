@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Walk Tracker MVP</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    #topbar {
+      padding: 12px;
+      background: #1b1b1b;
+      border-bottom: 1px solid #333;
+    }
+
+    #stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .card {
+      background: #222;
+      padding: 10px;
+      border-radius: 10px;
+      text-align: center;
+    }
+
+    .label {
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 4px;
+    }
+
+    .value {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    #controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      flex: 1;
+      min-width: 90px;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: #2f6fed;
+      color: white;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #555;
+    }
+
+    button.danger {
+      background: #c83d3d;
+    }
+
+    #map {
+      flex: 1;
+      width: 100%;
+    }
+
+    #history {
+      max-height: 180px;
+      overflow-y: auto;
+      background: #181818;
+      border-top: 1px solid #333;
+      padding: 10px;
+    }
+
+    .history-item {
+      padding: 10px;
+      border-radius: 8px;
+      background: #222;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="topbar">
+      <div id="stats">
+        <div class="card">
+          <div class="label">거리</div>
+          <div class="value" id="distance">0.00 km</div>
+        </div>
+        <div class="card">
+          <div class="label">시간</div>
+          <div class="value" id="time">00:00</div>
+        </div>
+        <div class="card">
+          <div class="label">상태</div>
+          <div class="value" id="status">대기</div>
+        </div>
+      </div>
+
+      <div id="controls">
+        <button id="startBtn">시작</button>
+        <button id="pauseBtn" class="secondary">일시정지</button>
+        <button id="stopBtn" class="danger">종료</button>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="history">
+      <strong>기록</strong>
+      <div id="historyList" style="margin-top: 8px;"></div>
+    </div>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    const distanceEl = document.getElementById("distance");
+    const timeEl = document.getElementById("time");
+    const statusEl = document.getElementById("status");
+    const historyListEl = document.getElementById("historyList");
+
+    const startBtn = document.getElementById("startBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    const map = L.map("map").setView([35.1796, 129.0756], 13);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    let watchId = null;
+    let currentMarker = null;
+    let routeLine = L.polyline([], { weight: 5 }).addTo(map);
+
+    let isTracking = false;
+    let isPaused = false;
+    let path = [];
+    let totalDistance = 0;
+    let startTime = null;
+    let pausedAt = null;
+    let pausedDuration = 0;
+    let timerInterval = null;
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+      const s = Math.floor(seconds % 60).toString().padStart(2, "0");
+      return `${m}:${s}`;
+    }
+
+    function updateTimer() {
+      if (!startTime || isPaused) return;
+      const now = Date.now();
+      const elapsed = Math.floor((now - startTime - pausedDuration) / 1000);
+      timeEl.textContent = formatTime(elapsed);
+    }
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const toRad = deg => deg * Math.PI / 180;
+      const φ1 = toRad(lat1);
+      const φ2 = toRad(lat2);
+      const Δφ = toRad(lat2 - lat1);
+      const Δλ = toRad(lon2 - lon1);
+
+      const a =
+        Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) *
+        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function updateDistance() {
+      distanceEl.textContent = `${(totalDistance / 1000).toFixed(2)} km`;
+    }
+
+    function onLocationFound(position) {
+      if (!isTracking || isPaused) return;
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const point = [lat, lng];
+
+      if (path.length > 0) {
+        const [prevLat, prevLng] = path[path.length - 1];
+        const segment = haversine(prevLat, prevLng, lat, lng);
+
+        // GPS 튐 방지: 100m 이상 갑자기 튀는 값은 일단 무시
+        if (segment < 100) {
+          totalDistance += segment;
+        }
+      }
+
+      path.push(point);
+      routeLine.setLatLngs(path);
+
+      if (!currentMarker) {
+        currentMarker = L.marker(point).addTo(map);
+      } else {
+        currentMarker.setLatLng(point);
+      }
+
+      map.setView(point, 17);
+      updateDistance();
+    }
+
+    function onLocationError(error) {
+      alert("위치 정보를 가져올 수 없습니다: " + error.message);
+      setStatus("위치 오류");
+    }
+
+    function startTracking() {
+      if (isTracking && !isPaused) return;
+
+      if (!startTime) {
+        startTime = Date.now();
+      }
+
+      if (isPaused && pausedAt) {
+        pausedDuration += Date.now() - pausedAt;
+      }
+
+      isTracking = true;
+      isPaused = false;
+      setStatus("추적 중");
+
+      if (!timerInterval) {
+        timerInterval = setInterval(updateTimer, 1000);
+      }
+
+      if (!watchId) {
+        watchId = navigator.geolocation.watchPosition(
+          onLocationFound,
+          onLocationError,
+          {
+            enableHighAccuracy: true,
+            maximumAge: 2000,
+            timeout: 10000
+          }
+        );
+      }
+    }
+
+    function pauseTracking() {
+      if (!isTracking || isPaused) return;
+      isPaused = true;
+      pausedAt = Date.now();
+      setStatus("일시정지");
+    }
+
+    function stopTracking() {
+      if (!startTime) return;
+
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+
+      clearInterval(timerInterval);
+      timerInterval = null;
+
+      const endTime = Date.now();
+      const elapsedSeconds = Math.floor((endTime - startTime - pausedDuration) / 1000);
+
+      const record = {
+        date: new Date().toLocaleString(),
+        distanceKm: (totalDistance / 1000).toFixed(2),
+        durationSec: elapsedSeconds,
+        path
+      };
+
+      saveRecord(record);
+      renderHistory();
+
+      isTracking = false;
+      isPaused = false;
+      pausedAt = null;
+      startTime = null;
+      pausedDuration = 0;
+      path = [];
+      totalDistance = 0;
+
+      routeLine.setLatLngs([]);
+      if (currentMarker) {
+        map.removeLayer(currentMarker);
+        currentMarker = null;
+      }
+
+      distanceEl.textContent = "0.00 km";
+      timeEl.textContent = "00:00";
+      setStatus("대기");
+    }
+
+    function saveRecord(record) {
+      const records = JSON.parse(localStorage.getItem("walkRecords") || "[]");
+      records.unshift(record);
+      localStorage.setItem("walkRecords", JSON.stringify(records));
+    }
+
+    function renderHistory() {
+      const records = JSON.parse(localStorage.getItem("walkRecords") || "[]");
+      historyListEl.innerHTML = "";
+
+      if (records.length === 0) {
+        historyListEl.innerHTML = '<div class="small">아직 기록이 없습니다.</div>';
+        return;
+      }
+
+      records.slice(0, 10).forEach((record, index) => {
+        const item = document.createElement("div");
+        item.className = "history-item";
+        item.innerHTML = `
+          <div><strong>${index + 1}. ${record.distanceKm} km</strong> · ${formatTime(record.durationSec)}</div>
+          <div class="small">${record.date}</div>
+        `;
+        historyListEl.appendChild(item);
+      });
+    }
+
+    startBtn.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        alert("이 브라우저는 위치 추적을 지원하지 않습니다.");
+        return;
+      }
+      startTracking();
+    });
+
+    pauseBtn.addEventListener("click", pauseTracking);
+    stopBtn.addEventListener("click", stopTracking);
+
+    renderHistory();
+  </script>
+</body>
+</html>
