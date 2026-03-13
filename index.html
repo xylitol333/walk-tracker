@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Walk Tracker V4 IndexedDB</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #000;
+      color: #fff;
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 12px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .card {
+      background: #151515;
+      border-radius: 22px;
+      padding: 18px 14px;
+      text-align: center;
+    }
+    .label {
+      font-size: 16px;
+      color: #bdbdbd;
+      margin-bottom: 10px;
+    }
+    .value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 14px 0 14px;
+    }
+    button {
+      border: 0;
+      border-radius: 18px;
+      padding: 18px 12px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      cursor: pointer;
+    }
+    .btn-blue { background: #2451d1; }
+    .btn-gray { background: #8f8f8f; }
+    .btn-red { background: #d93737; }
+    .btn-green { background: #2f8d33; }
+
+    #map {
+      width: 100%;
+      height: 420px;
+      border-radius: 22px;
+      overflow: hidden;
+      margin-top: 10px;
+      margin-bottom: 16px;
+    }
+
+    h2 {
+      font-size: 28px;
+      margin: 22px 0 12px;
+    }
+
+    .record-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 40px;
+    }
+
+    .record-item {
+      background: #151515;
+      border-radius: 22px;
+      padding: 16px;
+      cursor: pointer;
+    }
+
+    .record-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .record-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .record-meta {
+      color: #bdbdbd;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .empty {
+      background: #151515;
+      border-radius: 22px;
+      padding: 22px 16px;
+      color: #cfcfcf;
+      line-height: 1.6;
+    }
+
+    .gps-note {
+      color: #8f8f8f;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-top: 14px;
+      margin-bottom: 20px;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    .modal {
+      width: 100%;
+      max-width: 760px;
+      background: #101010;
+      border-radius: 24px 24px 0 0;
+      padding: 16px;
+      max-height: 92vh;
+      overflow-y: auto;
+    }
+
+    .modal h3 {
+      margin: 4px 0 12px;
+      font-size: 24px;
+    }
+
+    .detail-box {
+      background: #181818;
+      border-radius: 18px;
+      padding: 14px;
+      line-height: 1.7;
+      margin-bottom: 12px;
+    }
+
+    #detailMap {
+      width: 100%;
+      height: 380px;
+      border-radius: 18px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .poi-photo {
+      width: 100%;
+      border-radius: 14px;
+      margin-top: 8px;
+    }
+
+    .close-btn {
+      width: 100%;
+      background: #303030;
+      margin-top: 8px;
+    }
+
+    .poi-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .poi-item {
+      background: #181818;
+      border-radius: 16px;
+      padding: 12px;
+    }
+
+    .poi-item strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .danger-note {
+      color: #ffb3b3;
+      font-size: 12px;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 480px) {
+      .value { font-size: 28px; }
+      button { font-size: 16px; padding: 16px 10px; }
+      #map { height: 360px; }
+      #detailMap { height: 320px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="stats">
+      <div class="card">
+        <div class="label">거리</div>
+        <div class="value" id="distance">0.00 km</div>
+      </div>
+      <div class="card">
+        <div class="label">시간</div>
+        <div class="value" id="time">00:00</div>
+      </div>
+      <div class="card">
+        <div class="label">상태</div>
+        <div class="value" id="status">대기 중</div>
+      </div>
+    </div>
+
+    <div class="btn-grid">
+      <button class="btn-blue" id="startBtn">시작</button>
+      <button class="btn-gray" id="pauseBtn">일시정지</button>
+      <button class="btn-red" id="endBtn">종료</button>
+      <button class="btn-green" id="poiBtn">POI 추가</button>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="gps-note">
+      GPS 신호는 실내·고층·차량 이동·초기 수신 지연 시 흔들릴 수 있습니다.
+      현재 버전은 IndexedDB 기반 저장 구조입니다.
+    </div>
+
+    <h2>기록</h2>
+    <div id="recordList" class="record-list"></div>
+  </div>
+
+  <div class="modal-backdrop" id="detailModal">
+    <div class="modal">
+      <h3>기록 상세</h3>
+      <div class="detail-box" id="detailInfo"></div>
+      <div id="detailMap"></div>
+      <div id="detailPois" class="poi-list"></div>
+      <button class="close-btn" id="closeModalBtn">닫기</button>
+    </div>
+  </div>
+
+  <input type="file" id="hiddenPhotoInput" accept="image/*" style="display:none;" />
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const DB_NAME = "walkTrackerDB";
+    const DB_VERSION = 1;
+    const STORE_RECORDS = "records";
+
+    const distanceEl = document.getElementById("distance");
+    const timeEl = document.getElementById("time");
+    const statusEl = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const endBtn = document.getElementById("endBtn");
+    const poiBtn = document.getElementById("poiBtn");
+    const recordListEl = document.getElementById("recordList");
+    const detailModal = document.getElementById("detailModal");
+    const detailInfo = document.getElementById("detailInfo");
+    const detailPois = document.getElementById("detailPois");
+    const closeModalBtn = document.getElementById("closeModalBtn");
+    const hiddenPhotoInput = document.getElementById("hiddenPhotoInput");
+
+    let map = L.map("map").setView([35.1062, 129.0374], 16);
+    let detailMap = null;
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    let currentMarker = null;
+    let trackLine = L.polyline([], { weight: 5 }).addTo(map);
+    let poiMarkersLayer = L.layerGroup().addTo(map);
+
+    let isTracking = false;
+    let isPaused = false;
+    let watchId = null;
+    let timerId = null;
+
+    let startTime = null;
+    let pausedAccumulatedMs = 0;
+    let pauseStartedAt = null;
+
+    let totalDistanceMeters = 0;
+    let walkPath = [];
+    let pois = [];
+    let currentLatLng = null;
+    let pendingPoiLatLng = null;
+
+    function num(v, fallback = 0) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    function formatKm(v) {
+      return num(v, 0).toFixed(2);
+    }
+
+    function formatDuration(ms) {
+      const totalSec = Math.floor(num(ms, 0) / 1000);
+      const min = Math.floor(totalSec / 60);
+      const sec = totalSec % 60;
+      return String(min).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+    }
+
+    function formatDateTime(isoString) {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return "날짜 정보 없음";
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${day} ${hh}:${mm}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function updateDistanceUI() {
+      distanceEl.textContent = formatKm(totalDistanceMeters / 1000) + " km";
+    }
+
+    function updateTimeUI() {
+      if (!startTime) {
+        timeEl.textContent = "00:00";
+        return;
+      }
+
+      let now = Date.now();
+      let elapsed = now - startTime - pausedAccumulatedMs;
+
+      if (isPaused && pauseStartedAt) {
+        elapsed = pauseStartedAt - startTime - pausedAccumulatedMs;
+      }
+
+      if (elapsed < 0) elapsed = 0;
+      timeEl.textContent = formatDuration(elapsed);
+    }
+
+    function haversineMeters(lat1, lng1, lat2, lng2) {
+      const R = 6371000;
+      const toRad = deg => deg * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function clearWatchSafe() {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+    }
+
+    function resetCurrentSessionUI() {
+      trackLine.setLatLngs([]);
+      poiMarkersLayer.clearLayers();
+
+      if (currentMarker) {
+        map.removeLayer(currentMarker);
+        currentMarker = null;
+      }
+
+      currentLatLng = null;
+      walkPath = [];
+      pois = [];
+      totalDistanceMeters = 0;
+      startTime = null;
+      pausedAccumulatedMs = 0;
+      pauseStartedAt = null;
+      isTracking = false;
+      isPaused = false;
+
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+
+      updateDistanceUI();
+      updateTimeUI();
+      setStatus("대기 중");
+    }
+
+    function renderCurrentMarker(lat, lng) {
+      if (!currentMarker) {
+        currentMarker = L.marker([lat, lng]).addTo(map);
+      } else {
+        currentMarker.setLatLng([lat, lng]);
+      }
+    }
+
+    function redrawPoisOnMainMap() {
+      poiMarkersLayer.clearLayers();
+
+      for (const poi of pois) {
+        const m = L.marker([poi.lat, poi.lng]).addTo(poiMarkersLayer);
+        let popupHtml = `<strong>${escapeHtml(poi.title || "POI")}</strong>`;
+        if (poi.note) popupHtml += `<br>${escapeHtml(poi.note)}`;
+        if (poi.photoDataUrl) {
+          popupHtml += `<br><img src="${poi.photoDataUrl}" style="width:140px;border-radius:10px;margin-top:6px;">`;
+        }
+        m.bindPopup(popupHtml);
+      }
+    }
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains(STORE_RECORDS)) {
+            db.createObjectStore(STORE_RECORDS, { keyPath: "id" });
+          }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function saveRecordToDB(record) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_RECORDS, "readwrite");
+        const store = tx.objectStore(STORE_RECORDS);
+        store.put(record);
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error || new Error("DB 저장 실패"));
+        };
+      });
+    }
+
+    async function getAllRecordsFromDB() {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_RECORDS, "readonly");
+        const store = tx.objectStore(STORE_RECORDS);
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          db.close();
+          const records = Array.isArray(request.result) ? request.result : [];
+          records.sort((a, b) => num(b.id) - num(a.id));
+          resolve(records);
+        };
+
+        request.onerror = () => {
+          db.close();
+          reject(request.error);
+        };
+      });
+    }
+
+    async function getRecordById(recordId) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_RECORDS, "readonly");
+        const store = tx.objectStore(STORE_RECORDS);
+        const request = store.get(recordId);
+
+        request.onsuccess = () => {
+          db.close();
+          resolve(request.result || null);
+        };
+
+        request.onerror = () => {
+          db.close();
+          reject(request.error);
+        };
+      });
+    }
+
+    function normalizeRecord(record) {
+      return {
+        id: record?.id ?? Date.now(),
+        createdAt: record?.createdAt || new Date().toISOString(),
+        distanceKm: num(record?.distanceKm, 0),
+        durationMs: num(record?.durationMs, 0),
+        path: Array.isArray(record?.path) ? record.path : [],
+        pois: Array.isArray(record?.pois) ? record.pois : []
+      };
+    }
+
+    function resizeImageToDataUrl(file, maxWidth = 480, quality = 0.55) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+          const img = new Image();
+
+          img.onload = () => {
+            let { width, height } = img;
+
+            if (width > maxWidth) {
+              const ratio = maxWidth / width;
+              width = Math.round(width * ratio);
+              height = Math.round(height * ratio);
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const dataUrl = canvas.toDataURL("image/jpeg", quality);
+            resolve(dataUrl);
+          };
+
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function startTracking() {
+      if (!navigator.geolocation) {
+        alert("이 기기에서는 위치 기능을 사용할 수 없습니다.");
+        return;
+      }
+
+      if (isTracking && !isPaused) {
+        alert("이미 기록 중입니다.");
+        return;
+      }
+
+      if (!isTracking) {
+        walkPath = [];
+        pois = [];
+        totalDistanceMeters = 0;
+        updateDistanceUI();
+        trackLine.setLatLngs([]);
+        poiMarkersLayer.clearLayers();
+
+        startTime = Date.now();
+        pausedAccumulatedMs = 0;
+        pauseStartedAt = null;
+      }
+
+      isTracking = true;
+      isPaused = false;
+      setStatus("기록 중");
+
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(updateTimeUI, 1000);
+      updateTimeUI();
+
+      clearWatchSafe();
+
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          if (!isTracking || isPaused) return;
+
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const accuracy = position.coords.accuracy || 0;
+          const speed = position.coords.speed;
+
+          currentLatLng = { lat, lng };
+          renderCurrentMarker(lat, lng);
+
+          if (accuracy > 35) return;
+
+          const point = {
+            lat,
+            lng,
+            ts: Date.now(),
+            accuracy,
+            speed: typeof speed === "number" ? speed : null
+          };
+
+          const prev = walkPath[walkPath.length - 1];
+
+          if (!prev) {
+            walkPath.push(point);
+            trackLine.setLatLngs(walkPath.map(p => [p.lat, p.lng]));
+            map.setView([lat, lng], 17);
+            return;
+          }
+
+          const moved = haversineMeters(prev.lat, prev.lng, lat, lng);
+          const dtSec = Math.max(1, (point.ts - prev.ts) / 1000);
+          const calcSpeed = moved / dtSec;
+
+          if (moved < 3) return;
+          if (moved > 80) return;
+          if (calcSpeed > 3.2) return;
+
+          totalDistanceMeters += moved;
+          walkPath.push(point);
+
+          updateDistanceUI();
+          trackLine.setLatLngs(walkPath.map(p => [p.lat, p.lng]));
+          map.panTo([lat, lng], { animate: true });
+        },
+        (err) => {
+          console.error("GPS 오류:", err);
+          alert("위치 정보를 가져오지 못했습니다. 위치 권한을 확인해 주세요.");
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 1000,
+          timeout: 10000
+        }
+      );
+    }
+
+    function pauseTracking() {
+      if (!isTracking) {
+        alert("먼저 시작을 눌러 주세요.");
+        return;
+      }
+
+      if (isPaused) {
+        pausedAccumulatedMs += Date.now() - pauseStartedAt;
+        pauseStartedAt = null;
+        isPaused = false;
+        setStatus("기록 중");
+        startTracking();
+      } else {
+        isPaused = true;
+        pauseStartedAt = Date.now();
+        setStatus("일시정지");
+        clearWatchSafe();
+        updateTimeUI();
+      }
+    }
+
+    async function addPoiFlow() {
+      if (!isTracking || isPaused) {
+        alert("기록 중일 때만 POI를 추가할 수 있습니다.");
+        return;
+      }
+
+      if (!currentLatLng) {
+        alert("아직 현재 위치를 받지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+
+      pendingPoiLatLng = { ...currentLatLng };
+
+      const title = prompt("POI 이름을 입력해 주세요.", "POI");
+      if (title === null) return;
+
+      const note = prompt("메모를 입력해 주세요.", "") ?? "";
+
+      hiddenPhotoInput.value = "";
+      hiddenPhotoInput.click();
+
+      hiddenPhotoInput.onchange = async function () {
+        let photoDataUrl = null;
+        const file = hiddenPhotoInput.files && hiddenPhotoInput.files[0];
+
+        if (file) {
+          try {
+            photoDataUrl = await resizeImageToDataUrl(file, 480, 0.55);
+          } catch (e) {
+            console.error("사진 변환 실패:", e);
+            alert("사진 변환에 실패했습니다. 사진 없이 저장합니다.");
+          }
+        }
+
+        const poi = {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          lat: pendingPoiLatLng.lat,
+          lng: pendingPoiLatLng.lng,
+          title: title || "POI",
+          note: note || "",
+          photoDataUrl: photoDataUrl,
+          createdAt: new Date().toISOString()
+        };
+
+        pois.push(poi);
+        redrawPoisOnMainMap();
+        alert("POI가 추가되었습니다.");
+      };
+    }
+
+    async function endTracking() {
+      if (!isTracking) {
+        alert("현재 기록 중인 산책이 없습니다.");
+        return;
+      }
+
+      clearWatchSafe();
+
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+
+      let endMs = Date.now();
+      let durationMs = endMs - startTime - pausedAccumulatedMs;
+      if (isPaused && pauseStartedAt) {
+        durationMs = pauseStartedAt - startTime - pausedAccumulatedMs;
+      }
+      if (durationMs < 0) durationMs = 0;
+
+      const cleanPath = walkPath.map(p => ({
+        lat: num(p.lat),
+        lng: num(p.lng),
+        ts: p.ts || Date.now(),
+        accuracy: p.accuracy ?? null,
+        speed: p.speed ?? null
+      }));
+
+      const cleanPois = pois.map(p => ({
+        id: p.id,
+        lat: num(p.lat),
+        lng: num(p.lng),
+        title: p.title || "POI",
+        note: p.note || "",
+        photoDataUrl: typeof p.photoDataUrl === "string" ? p.photoDataUrl : null,
+        createdAt: p.createdAt || new Date().toISOString()
+      }));
+
+      const record = normalizeRecord({
+        id: Date.now(),
+        createdAt: new Date().toISOString(),
+        distanceKm: totalDistanceMeters / 1000,
+        durationMs,
+        path: cleanPath,
+        pois: cleanPois
+      });
+
+      console.log("저장 직전 record", record);
+
+      try {
+        await saveRecordToDB(record);
+        await renderRecordList();
+        resetCurrentSessionUI();
+        alert("기록이 저장되었습니다.");
+      } catch (e) {
+        console.error("저장 실패:", e);
+        alert("저장 실패: " + (e?.message || e));
+      }
+    }
+
+    async function renderRecordList() {
+      try {
+        const records = (await getAllRecordsFromDB()).map(normalizeRecord);
+
+        if (!records.length) {
+          recordListEl.innerHTML = `
+            <div class="empty">
+              <div style="font-size:20px;font-weight:700;margin-bottom:8px;">아직 저장된 기록이 없습니다</div>
+              <div>걷기를 시작하고 종료하면 여기에 기록이 쌓입니다.</div>
+            </div>
+          `;
+          return;
+        }
+
+        recordListEl.innerHTML = "";
+
+        records.forEach((rawRecord) => {
+          const record = normalizeRecord(rawRecord);
+
+          const item = document.createElement("div");
+          item.className = "record-item";
+
+          item.innerHTML = `
+            <div class="record-top">
+              <div class="record-title">${formatKm(record.distanceKm)} km</div>
+              <div style="font-size:14px;color:#bdbdbd;">POI ${record.pois.length}개</div>
+            </div>
+            <div class="record-meta">
+              ${formatDateTime(record.createdAt)}<br>
+              시간 ${formatDuration(record.durationMs)}
+            </div>
+          `;
+
+          item.addEventListener("click", () => openRecordDetail(record.id));
+          recordListEl.appendChild(item);
+        });
+      } catch (e) {
+        console.error("기록 목록 렌더링 실패:", e);
+        recordListEl.innerHTML = `
+          <div class="empty">
+            <div style="font-size:20px;font-weight:700;margin-bottom:8px;">기록을 불러오지 못했습니다</div>
+            <div>${escapeHtml(e?.message || String(e))}</div>
+          </div>
+        `;
+      }
+    }
+
+    async function openRecordDetail(recordId) {
+      try {
+        const raw = await getRecordById(recordId);
+        const record = normalizeRecord(raw || {});
+
+        detailInfo.innerHTML = `
+          <strong>날짜</strong><br>${formatDateTime(record.createdAt)}<br><br>
+          <strong>거리</strong><br>${formatKm(record.distanceKm)} km<br><br>
+          <strong>시간</strong><br>${formatDuration(record.durationMs)}<br><br>
+          <strong>경로 포인트</strong><br>${record.path.length}개<br>
+          <div class="danger-note">차량 이동이나 GPS 튐이 있으면 경로가 약간 꺾여 보일 수 있습니다.</div>
+        `;
+
+        detailPois.innerHTML = "";
+
+        if (record.pois.length) {
+          record.pois.forEach(poi => {
+            const div = document.createElement("div");
+            div.className = "poi-item";
+            div.innerHTML = `
+              <strong>${escapeHtml(poi.title || "POI")}</strong>
+              <div>${escapeHtml(poi.note || "메모 없음")}</div>
+              ${poi.photoDataUrl ? `<img class="poi-photo" src="${poi.photoDataUrl}" alt="POI photo">` : ""}
+            `;
+            detailPois.appendChild(div);
+          });
+        } else {
+          detailPois.innerHTML = `<div class="detail-box">저장된 POI가 없습니다.</div>`;
+        }
+
+        detailModal.style.display = "flex";
+
+        setTimeout(() => {
+          if (detailMap) {
+            detailMap.remove();
+            detailMap = null;
+          }
+
+          detailMap = L.map("detailMap");
+
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "&copy; OpenStreetMap contributors"
+          }).addTo(detailMap);
+
+          const latlngs = record.path.map(p => [num(p.lat), num(p.lng)]);
+          const line = L.polyline(latlngs, { weight: 5 }).addTo(detailMap);
+
+          if (latlngs.length) {
+            detailMap.fitBounds(line.getBounds(), { padding: [20, 20] });
+            L.marker(latlngs[0]).addTo(detailMap).bindPopup("시작점");
+            L.marker(latlngs[latlngs.length - 1]).addTo(detailMap).bindPopup("종료점");
+          } else {
+            detailMap.setView([35.1062, 129.0374], 16);
+          }
+
+          record.pois.forEach(poi => {
+            const m = L.marker([num(poi.lat), num(poi.lng)]).addTo(detailMap);
+            let popupHtml = `<strong>${escapeHtml(poi.title || "POI")}</strong>`;
+            if (poi.note) popupHtml += `<br>${escapeHtml(poi.note)}`;
+            if (poi.photoDataUrl) {
+              popupHtml += `<br><img src="${poi.photoDataUrl}" style="width:140px;border-radius:10px;margin-top:6px;">`;
+            }
+            m.bindPopup(popupHtml);
+          });
+        }, 50);
+      } catch (e) {
+        console.error("상세 열기 실패:", e);
+        alert("기록 상세를 열지 못했습니다.");
+      }
+    }
+
+    function closeRecordDetail() {
+      detailModal.style.display = "none";
+      if (detailMap) {
+        detailMap.remove();
+        detailMap = null;
+      }
+    }
+
+    startBtn.addEventListener("click", startTracking);
+    pauseBtn.addEventListener("click", pauseTracking);
+    endBtn.addEventListener("click", endTracking);
+    poiBtn.addEventListener("click", addPoiFlow);
+    closeModalBtn.addEventListener("click", closeRecordDetail);
+    detailModal.addEventListener("click", (e) => {
+      if (e.target === detailModal) closeRecordDetail();
+    });
+
+    updateDistanceUI();
+    updateTimeUI();
+    setStatus("대기 중");
+    renderRecordList();
+  </script>
+</body>
+</html>
