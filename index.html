@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Walk Tracker V7</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #000;
+      color: #fff;
+    }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 12px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .card {
+      background: #151515;
+      border-radius: 18px;
+      padding: 16px 12px;
+      text-align: center;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset;
+    }
+
+    .label {
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
+
+    .value {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 16px;
+      padding: 16px 12px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      cursor: pointer;
+      min-height: 56px;
+    }
+
+    .start-btn { background: #1565ff; }
+    .stop-btn { background: #b3261e; }
+    .poi-btn { background: #1f8f3a; }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    #map {
+      height: 40vh;
+      min-height: 320px;
+      border-radius: 22px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .section {
+      background: #111;
+      border-radius: 22px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset;
+    }
+
+    .section h2 {
+      margin: 0 0 12px 0;
+      font-size: 20px;
+    }
+
+    .hint {
+      color: #bdbdbd;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .warn {
+      color: #ffb3b3;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-top: 8px;
+    }
+
+    .record-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .record-item {
+      background: #181818;
+      border-radius: 18px;
+      padding: 14px;
+      cursor: pointer;
+    }
+
+    .record-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .record-meta {
+      font-size: 13px;
+      color: #aaa;
+      line-height: 1.5;
+    }
+
+    .poi-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .poi-item {
+      background: #181818;
+      border-radius: 18px;
+      padding: 12px;
+    }
+
+    .poi-name {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .poi-desc {
+      font-size: 13px;
+      color: #bbb;
+      margin-bottom: 8px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .poi-thumb {
+      width: 100%;
+      max-height: 220px;
+      object-fit: cover;
+      border-radius: 14px;
+      display: block;
+      margin-top: 8px;
+    }
+
+    .empty {
+      color: #888;
+      font-size: 14px;
+      padding: 8px 2px;
+    }
+
+    .sheet,
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(0,0,0,0.55);
+    }
+
+    .modal {
+      align-items: center;
+      padding: 16px;
+    }
+
+    .sheet.show,
+    .modal.show {
+      display: flex;
+    }
+
+    .sheet-panel,
+    .modal-panel {
+      width: 100%;
+      max-width: 760px;
+      background: #0b0b0b;
+      border-radius: 28px 28px 0 0;
+      padding: 18px;
+      box-shadow: 0 -10px 30px rgba(0,0,0,0.35);
+    }
+
+    .modal-panel {
+      border-radius: 28px;
+      max-height: 92vh;
+      overflow-y: auto;
+    }
+
+    .sheet-header,
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .sheet-title,
+    .modal-title {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .x-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: #202020;
+      padding: 0;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      color: #bbb;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .field input,
+    .field textarea {
+      width: 100%;
+      border: 0;
+      border-radius: 14px;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 14px;
+      font-size: 15px;
+    }
+
+    .field textarea {
+      resize: vertical;
+      min-height: 90px;
+    }
+
+    .sheet-actions,
+    .modal-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .secondary-btn {
+      background: #2a2a2a;
+    }
+
+    .primary-btn {
+      background: #1565ff;
+    }
+
+    .danger-btn {
+      background: #b3261e;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .mini-card {
+      background: #151515;
+      border-radius: 16px;
+      padding: 12px;
+    }
+
+    .mini-label {
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+
+    .mini-value {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    #detailMap {
+      width: 100%;
+      height: 320px;
+      border-radius: 18px;
+      overflow: hidden;
+      margin: 10px 0 14px;
+    }
+
+    .status-bar {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #9ec3ff;
+      line-height: 1.5;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 6px;
+      margin-top: 6px;
+      background: #1f1f1f;
+      color: #ddd;
+    }
+
+    .pill.good { color: #9cffb2; }
+    .pill.warn { color: #ffd38a; }
+    .pill.bad { color: #ff9e9e; }
+
+    @media (max-width: 640px) {
+      .stats,
+      .controls,
+      .detail-grid,
+      .sheet-actions,
+      .modal-actions {
+        grid-template-columns: 1fr;
+      }
+
+      #map {
+        height: 36vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="stats">
+      <div class="card">
+        <div class="label">거리</div>
+        <div class="value" id="distance">0.00 km</div>
+      </div>
+      <div class="card">
+        <div class="label">시간</div>
+        <div class="value" id="duration">00:00:00</div>
+      </div>
+      <div class="card">
+        <div class="label">POI</div>
+        <div class="value" id="poiCount">0</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="start-btn" id="startBtn">시작</button>
+      <button class="stop-btn" id="stopBtn" disabled>종료</button>
+      <button class="poi-btn" id="poiBtn" disabled>POI 추가</button>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="section">
+      <h2>현재 상태</h2>
+      <div class="hint">
+        걷기, 빠른 걷기, 러닝은 기록하고 차량처럼 보이는 연속 과속 이동만 제외하도록 설정됨.
+      </div>
+      <div class="status-bar" id="statusBar">대기 중</div>
+      <div>
+        <span class="pill good">러닝 허용</span>
+        <span class="pill warn">GPS 튐 보정</span>
+        <span class="pill bad">차량 패턴 차단</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>저장된 기록</h2>
+      <div class="record-list" id="recordList"></div>
+    </div>
+  </div>
+
+  <div class="sheet" id="poiSheet">
+    <div class="sheet-panel">
+      <div class="sheet-header">
+        <div class="sheet-title">POI 추가</div>
+        <button class="x-btn" id="closePoiSheet">×</button>
+      </div>
+
+      <div class="field">
+        <label for="poiName">이름</label>
+        <input type="text" id="poiName" placeholder="예: 벚꽃 포인트" />
+      </div>
+
+      <div class="field">
+        <label for="poiDesc">설명</label>
+        <textarea id="poiDesc" placeholder="간단한 메모를 남겨봐"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="poiPhoto">사진</label>
+        <input type="file" id="poiPhoto" accept="image/*" />
+      </div>
+
+      <div class="sheet-actions">
+        <button class="secondary-btn" id="cancelPoiBtn">취소</button>
+        <button class="primary-btn" id="savePoiBtn">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="detailModal">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="modal-title">기록 상세</div>
+        <button class="x-btn" id="closeDetailModal">×</button>
+      </div>
+
+      <div class="detail-grid">
+        <div class="mini-card">
+          <div class="mini-label">거리</div>
+          <div class="mini-value" id="detailDistance">-</div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-label">시간</div>
+          <div class="mini-value" id="detailDuration">-</div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-label">평균 속도</div>
+          <div class="mini-value" id="detailPace">-</div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-label">POI 수</div>
+          <div class="mini-value" id="detailPoiCount">-</div>
+        </div>
+      </div>
+
+      <div id="detailMap"></div>
+
+      <div class="section" style="margin-bottom: 0;">
+        <h2 style="font-size:18px;">POI 목록</h2>
+        <div class="poi-list" id="detailPoiList"></div>
+
+        <div class="modal-actions">
+          <button class="secondary-btn" id="closeDetailBtn">닫기</button>
+          <button class="danger-btn" id="deleteRecordBtn">삭제</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const STORAGE_KEY = "walkTrackerRecordsV7";
+
+    const CONFIG = {
+      minMoveMeters: 3,                 // 3m 미만 흔들림 무시
+      maxAccuracyMeters: 35,            // 정확도 너무 나쁘면 제외
+      maxHumanSpeedMps: 7.2,            // 약 25.9 km/h, 러닝은 허용
+      suspiciousSpeedMps: 9.5,          // 이 속도부터 차량 의심
+      hardJumpMeters: 120,              // 짧은 시간 내 이 이상 점프면 제외
+      jumpWindowSec: 8,                 // 8초 안에 점프 판정
+      vehicleStrikeLimit: 2,            // 연속 2회 차량 의심이면 누적 제외
+      maxGapSecForDistance: 12          // 샘플 간격 너무 길면 거리 누적 안 함
+    };
+
+    let map = L.map("map").setView([37.5665, 126.9780], 16);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    let currentPolyline = L.polyline([], { weight: 5 }).addTo(map);
+    let currentMarkers = [];
+
+    let watchId = null;
+    let isTracking = false;
+    let startTime = null;
+    let timerInterval = null;
+
+    let acceptedTrack = [];
+    let rawTrack = [];
+    let pois = [];
+    let totalDistanceMeters = 0;
+    let lastAcceptedPoint = null;
+    let vehicleStrikeCount = 0;
+    let currentPosition = null;
+
+    let detailMap = null;
+    let detailPolyline = null;
+    let detailMarkers = [];
+    let selectedRecordId = null;
+
+    const $distance = document.getElementById("distance");
+    const $duration = document.getElementById("duration");
+    const $poiCount = document.getElementById("poiCount");
+    const $recordList = document.getElementById("recordList");
+    const $statusBar = document.getElementById("statusBar");
+
+    const $startBtn = document.getElementById("startBtn");
+    const $stopBtn = document.getElementById("stopBtn");
+    const $poiBtn = document.getElementById("poiBtn");
+
+    const $poiSheet = document.getElementById("poiSheet");
+    const $closePoiSheet = document.getElementById("closePoiSheet");
+    const $cancelPoiBtn = document.getElementById("cancelPoiBtn");
+    const $savePoiBtn = document.getElementById("savePoiBtn");
+    const $poiName = document.getElementById("poiName");
+    const $poiDesc = document.getElementById("poiDesc");
+    const $poiPhoto = document.getElementById("poiPhoto");
+
+    const $detailModal = document.getElementById("detailModal");
+    const $closeDetailModal = document.getElementById("closeDetailModal");
+    const $closeDetailBtn = document.getElementById("closeDetailBtn");
+    const $deleteRecordBtn = document.getElementById("deleteRecordBtn");
+    const $detailDistance = document.getElementById("detailDistance");
+    const $detailDuration = document.getElementById("detailDuration");
+    const $detailPace = document.getElementById("detailPace");
+    const $detailPoiCount = document.getElementById("detailPoiCount");
+    const $detailPoiList = document.getElementById("detailPoiList");
+
+    function formatDuration(ms) {
+      const totalSec = Math.floor(ms / 1000);
+      const hh = String(Math.floor(totalSec / 3600)).padStart(2, "0");
+      const mm = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
+      const ss = String(totalSec % 60).padStart(2, "0");
+      return `${hh}:${mm}:${ss}`;
+    }
+
+    function formatDistance(meters) {
+      return `${(meters / 1000).toFixed(2)} km`;
+    }
+
+    function formatAvgSpeed(distanceMeters, durationMs) {
+      if (!durationMs || durationMs <= 0) return "-";
+      const kmh = (distanceMeters / 1000) / (durationMs / 3600000);
+      return `${kmh.toFixed(1)} km/h`;
+    }
+
+    function escapeHtml(str = "") {
+      return str
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function getRecords() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveRecords(records) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    }
+
+    function updateStats() {
+      $distance.textContent = formatDistance(totalDistanceMeters);
+      $poiCount.textContent = pois.length;
+      if (startTime) {
+        $duration.textContent = formatDuration(Date.now() - startTime);
+      } else {
+        $duration.textContent = "00:00:00";
+      }
+    }
+
+    function setStatus(message) {
+      $statusBar.textContent = message;
+    }
+
+    function resetTrackingState() {
+      rawTrack = [];
+      acceptedTrack = [];
+      pois = [];
+      totalDistanceMeters = 0;
+      lastAcceptedPoint = null;
+      vehicleStrikeCount = 0;
+      currentPosition = null;
+
+      currentPolyline.setLatLngs([]);
+      currentMarkers.forEach(marker => map.removeLayer(marker));
+      currentMarkers = [];
+
+      updateStats();
+      setStatus("대기 중");
+    }
+
+    function startTimer() {
+      timerInterval = setInterval(updateStats, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    function toRad(v) {
+      return (v * Math.PI) / 180;
+    }
+
+    function getDistanceMeters(lat1, lng1, lat2, lng2) {
+      const R = 6371000;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) *
+          Math.cos(toRad(lat2)) *
+          Math.sin(dLng / 2) *
+          Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function addCurrentPoiMarker(poi) {
+      const marker = L.marker([poi.lat, poi.lng]).addTo(map);
+      const photoHtml = poi.photo
+        ? `<img class="poi-thumb" src="${poi.photo}" alt="${escapeHtml(poi.name)}" />`
+        : "";
+      marker.bindPopup(`
+        <div style="color:#111; min-width: 180px;">
+          <strong>${escapeHtml(poi.name || "POI")}</strong><br/>
+          <div style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(poi.desc || "")}</div>
+          ${photoHtml}
+        </div>
+      `);
+      currentMarkers.push(marker);
+    }
+
+    function processPosition(pos) {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy ?? 999;
+      const timestamp = pos.timestamp || Date.now();
+
+      currentPosition = { lat, lng, accuracy, timestamp };
+      rawTrack.push({ lat, lng, accuracy, timestamp });
+
+      if (accuracy > CONFIG.maxAccuracyMeters) {
+        setStatus(`정확도 낮음(${Math.round(accuracy)}m) → 거리 계산 제외`);
+        return;
+      }
+
+      if (!lastAcceptedPoint) {
+        lastAcceptedPoint = { lat, lng, accuracy, timestamp };
+        acceptedTrack.push({ lat, lng, accuracy, timestamp });
+        currentPolyline.setLatLngs(acceptedTrack.map(p => [p.lat, p.lng]));
+        map.setView([lat, lng], 17);
+        setStatus(`기록 시작점 확보 · 정확도 ${Math.round(accuracy)}m`);
+        return;
+      }
+
+      const dtSec = (timestamp - lastAcceptedPoint.timestamp) / 1000;
+      if (dtSec <= 0) {
+        setStatus("시간 간격 비정상 → 제외");
+        return;
+      }
+
+      const dist = getDistanceMeters(
+        lastAcceptedPoint.lat,
+        lastAcceptedPoint.lng,
+        lat,
+        lng
+      );
+
+      const speedMps = dist / dtSec;
+      const speedKmh = speedMps * 3.6;
+
+      if (dist < CONFIG.minMoveMeters) {
+        setStatus(`미세 흔들림 ${dist.toFixed(1)}m → 무시`);
+        return;
+      }
+
+      if (dtSec > CONFIG.maxGapSecForDistance) {
+        lastAcceptedPoint = { lat, lng, accuracy, timestamp };
+        acceptedTrack.push({ lat, lng, accuracy, timestamp });
+        currentPolyline.setLatLngs(acceptedTrack.map(p => [p.lat, p.lng]));
+        setStatus(`샘플 간격 김(${dtSec.toFixed(1)}초) → 경로만 연결, 거리 누적 안 함`);
+        return;
+      }
+
+      const isHardJump =
+        dist >= CONFIG.hardJumpMeters && dtSec <= CONFIG.jumpWindowSec;
+
+      if (isHardJump) {
+        setStatus(`순간 점프 의심 ${dist.toFixed(1)}m / ${dtSec.toFixed(1)}초 → 제외`);
+        return;
+      }
+
+      if (speedMps > CONFIG.maxHumanSpeedMps) {
+        vehicleStrikeCount += 1;
+        if (vehicleStrikeCount >= CONFIG.vehicleStrikeLimit || speedMps >= CONFIG.suspiciousSpeedMps) {
+          setStatus(`차량 의심 속도 ${speedKmh.toFixed(1)} km/h → 거리 제외`);
+          return;
+        } else {
+          setStatus(`고속 포인트 감지 ${speedKmh.toFixed(1)} km/h · 1회 경고`);
+          return;
+        }
+      } else {
+        vehicleStrikeCount = 0;
+      }
+
+      totalDistanceMeters += dist;
+      lastAcceptedPoint = { lat, lng, accuracy, timestamp };
+      acceptedTrack.push({ lat, lng, accuracy, timestamp });
+
+      currentPolyline.setLatLngs(acceptedTrack.map(p => [p.lat, p.lng]));
+      map.panTo([lat, lng]);
+      updateStats();
+
+      setStatus(
+        `정상 기록 · ${dist.toFixed(1)}m / ${dtSec.toFixed(1)}초 / ${speedKmh.toFixed(1)} km/h`
+      );
+    }
+
+    function handleGeoError(err) {
+      const msg = err && err.message ? err.message : "위치 정보를 가져오지 못했어.";
+      setStatus(`위치 오류: ${msg}`);
+      alert(msg);
+    }
+
+    function startTracking() {
+      if (!navigator.geolocation) {
+        alert("이 기기에서는 위치 기능을 사용할 수 없어.");
+        return;
+      }
+
+      resetTrackingState();
+      isTracking = true;
+      startTime = Date.now();
+      updateStats();
+      startTimer();
+
+      $startBtn.disabled = true;
+      $stopBtn.disabled = false;
+      $poiBtn.disabled = false;
+
+      watchId = navigator.geolocation.watchPosition(
+        processPosition,
+        handleGeoError,
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 10000
+        }
+      );
+
+      setStatus("위치 추적 시작");
+    }
+
+    function stopTracking() {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+
+      isTracking = false;
+      stopTimer();
+
+      $startBtn.disabled = false;
+      $stopBtn.disabled = true;
+      $poiBtn.disabled = true;
+
+      const endTime = Date.now();
+      const durationMs = startTime ? endTime - startTime : 0;
+
+      if (acceptedTrack.length < 2) {
+        setStatus("포인트가 부족해서 저장하지 않음");
+        startTime = null;
+        updateStats();
+        return;
+      }
+
+      const records = getRecords();
+      const record = {
+        id: String(Date.now()),
+        createdAt: new Date().toISOString(),
+        startTime,
+        endTime,
+        durationMs,
+        distanceMeters: totalDistanceMeters,
+        avgSpeedKmh: durationMs > 0 ? ((totalDistanceMeters / 1000) / (durationMs / 3600000)) : 0,
+        track: acceptedTrack,
+        rawTrackCount: rawTrack.length,
+        poiCount: pois.length,
+        pois
+      };
+
+      records.unshift(record);
+      saveRecords(records);
+      renderRecordList();
+
+      setStatus("기록 저장 완료");
+      startTime = null;
+      updateStats();
+    }
+
+    function openPoiSheet() {
+      if (!isTracking || !currentPosition) {
+        alert("먼저 위치가 잡힌 뒤에 POI를 추가할 수 있어.");
+        return;
+      }
+      $poiName.value = "";
+      $poiDesc.value = "";
+      $poiPhoto.value = "";
+      $poiSheet.classList.add("show");
+    }
+
+    function closePoiSheet() {
+      $poiSheet.classList.remove("show");
+    }
+
+    function fileToDataURL(file) {
+      return new Promise((resolve, reject) => {
+        if (!file) return resolve("");
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function savePoi() {
+      if (!currentPosition) {
+        alert("현재 위치가 없어.");
+        return;
+      }
+
+      const name = $poiName.value.trim() || `POI ${pois.length + 1}`;
+      const desc = $poiDesc.value.trim();
+      const file = $poiPhoto.files[0];
+      let photo = "";
+
+      if (file) {
+        try {
+          photo = await fileToDataURL(file);
+        } catch (e) {
+          alert("사진을 읽지 못했어.");
+          return;
+        }
+      }
+
+      const poi = {
+        id: String(Date.now()),
+        name,
+        desc,
+        photo,
+        lat: currentPosition.lat,
+        lng: currentPosition.lng,
+        accuracy: currentPosition.accuracy,
+        timestamp: Date.now()
+      };
+
+      pois.push(poi);
+      addCurrentPoiMarker(poi);
+      updateStats();
+      closePoiSheet();
+      setStatus(`POI 저장 완료 · ${name}`);
+    }
+
+    function renderRecordList() {
+      const records = getRecords();
+      if (!records.length) {
+        $recordList.innerHTML = `<div class="empty">아직 저장된 기록이 없어.</div>`;
+        return;
+      }
+
+      $recordList.innerHTML = records.map(record => {
+        const date = new Date(record.createdAt);
+        return `
+          <div class="record-item" data-id="${record.id}">
+            <div class="record-title">${date.toLocaleString("ko-KR")}</div>
+            <div class="record-meta">
+              거리 ${formatDistance(record.distanceMeters)}<br/>
+              시간 ${formatDuration(record.durationMs)}<br/>
+              평균 속도 ${record.avgSpeedKmh ? record.avgSpeedKmh.toFixed(1) : "0.0"} km/h ·
+              POI ${record.poiCount || 0}개
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      document.querySelectorAll(".record-item").forEach(item => {
+        item.addEventListener("click", () => openRecordDetail(item.dataset.id));
+      });
+    }
+
+    function ensureDetailMap() {
+      if (!detailMap) {
+        detailMap = L.map("detailMap");
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "&copy; OpenStreetMap contributors"
+        }).addTo(detailMap);
+      }
+
+      if (detailPolyline) {
+        detailMap.removeLayer(detailPolyline);
+        detailPolyline = null;
+      }
+
+      detailMarkers.forEach(marker => detailMap.removeLayer(marker));
+      detailMarkers = [];
+
+      setTimeout(() => detailMap.invalidateSize(), 100);
+    }
+
+    function openRecordDetail(recordId) {
+      const records = getRecords();
+      const record = records.find(r => r.id === recordId);
+      if (!record) return;
+
+      selectedRecordId = recordId;
+
+      $detailDistance.textContent = formatDistance(record.distanceMeters);
+      $detailDuration.textContent = formatDuration(record.durationMs);
+      $detailPace.textContent = formatAvgSpeed(record.distanceMeters, record.durationMs);
+      $detailPoiCount.textContent = `${record.poiCount || 0}개`;
+
+      ensureDetailMap();
+
+      const latlngs = (record.track || []).map(p => [p.lat, p.lng]);
+      detailPolyline = L.polyline(latlngs, { weight: 5 }).addTo(detailMap);
+
+      if (latlngs.length) {
+        detailMap.fitBounds(latlngs, { padding: [20, 20] });
+      } else {
+        detailMap.setView([37.5665, 126.9780], 16);
+      }
+
+      (record.pois || []).forEach(poi => {
+        const marker = L.marker([poi.lat, poi.lng]).addTo(detailMap);
+        const photoHtml = poi.photo
+          ? `<img class="poi-thumb" src="${poi.photo}" alt="${escapeHtml(poi.name)}" />`
+          : "";
+        marker.bindPopup(`
+          <div style="color:#111; min-width: 180px;">
+            <strong>${escapeHtml(poi.name || "POI")}</strong><br/>
+            <div style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(poi.desc || "")}</div>
+            ${photoHtml}
+          </div>
+        `);
+        detailMarkers.push(marker);
+      });
+
+      if (!record.pois || !record.pois.length) {
+        $detailPoiList.innerHTML = `<div class="empty">저장된 POI가 없어.</div>`;
+      } else {
+        $detailPoiList.innerHTML = record.pois.map(poi => `
+          <div class="poi-item">
+            <div class="poi-name">${escapeHtml(poi.name || "POI")}</div>
+            <div class="poi-desc">${escapeHtml(poi.desc || "")}</div>
+            ${poi.photo ? `<img class="poi-thumb" src="${poi.photo}" alt="${escapeHtml(poi.name)}" />` : ""}
+          </div>
+        `).join("");
+      }
+
+      $detailModal.classList.add("show");
+      setTimeout(() => detailMap.invalidateSize(), 120);
+    }
+
+    function closeDetailModal() {
+      $detailModal.classList.remove("show");
+      selectedRecordId = null;
+    }
+
+    function deleteSelectedRecord() {
+      if (!selectedRecordId) return;
+      const ok = confirm("이 기록을 삭제할까?");
+      if (!ok) return;
+
+      let records = getRecords();
+      records = records.filter(r => r.id !== selectedRecordId);
+      saveRecords(records);
+      closeDetailModal();
+      renderRecordList();
+      setStatus("기록 삭제 완료");
+    }
+
+    $startBtn.addEventListener("click", startTracking);
+    $stopBtn.addEventListener("click", stopTracking);
+    $poiBtn.addEventListener("click", openPoiSheet);
+
+    $closePoiSheet.addEventListener("click", closePoiSheet);
+    $cancelPoiBtn.addEventListener("click", closePoiSheet);
+    $savePoiBtn.addEventListener("click", savePoi);
+
+    $closeDetailModal.addEventListener("click", closeDetailModal);
+    $closeDetailBtn.addEventListener("click", closeDetailModal);
+    $deleteRecordBtn.addEventListener("click", deleteSelectedRecord);
+
+    $poiSheet.addEventListener("click", (e) => {
+      if (e.target === $poiSheet) closePoiSheet();
+    });
+
+    $detailModal.addEventListener("click", (e) => {
+      if (e.target === $detailModal) closeDetailModal();
+    });
+
+    renderRecordList();
+    updateStats();
+  </script>
+</body>
+</html>
