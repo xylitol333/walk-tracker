@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Walk Tracker V10 Auto Pause</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 12px;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 8px 0 14px;
+    }
+
+    .map-wrap {
+      border-radius: 18px;
+      overflow: hidden;
+      margin-bottom: 12px;
+      border: 1px solid #222;
+    }
+
+    #map {
+      width: 100%;
+      height: 330px;
+      background: #111;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .card {
+      background: #151515;
+      border: 1px solid #242424;
+      border-radius: 18px;
+      padding: 14px 10px;
+      text-align: center;
+    }
+
+    .label {
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+
+    .value {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .status-text {
+      margin: 0 0 12px;
+      padding: 13px 14px;
+      background: #151515;
+      border: 1px solid #242424;
+      border-radius: 16px;
+      text-align: center;
+      font-size: 15px;
+      color: #ddd;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    button {
+      border: none;
+      border-radius: 16px;
+      padding: 15px 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .primary { background: #2563eb; color: white; }
+    .secondary { background: #2a2a2a; color: white; }
+    .danger { background: #b91c1c; color: white; }
+    .success { background: #059669; color: white; }
+    .disabled {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .resume-btn {
+      width: 100%;
+      margin-bottom: 12px;
+      background: #1d4ed8;
+      color: white;
+      display: none;
+    }
+
+    .section {
+      background: #101010;
+      border: 1px solid #222;
+      border-radius: 18px;
+      padding: 14px;
+      margin-top: 12px;
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+
+    .hint {
+      color: #aaa;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .record-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .record-item {
+      background: #171717;
+      border: 1px solid #292929;
+      border-radius: 16px;
+      padding: 12px;
+    }
+
+    .record-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .record-title {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .record-meta {
+      font-size: 13px;
+      color: #bfbfbf;
+      line-height: 1.55;
+      white-space: pre-line;
+    }
+
+    .record-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .small-btn {
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 560px) {
+      .stats {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+      .value {
+        font-size: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Walk Tracker V10</h1>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+  </div>
+
+  <div class="stats">
+    <div class="card">
+      <div class="label">거리</div>
+      <div class="value" id="distanceValue">0.00 km</div>
+    </div>
+    <div class="card">
+      <div class="label">시간</div>
+      <div class="value" id="timeValue">00:00</div>
+    </div>
+    <div class="card">
+      <div class="label">상태</div>
+      <div class="value" id="modeValue">대기</div>
+    </div>
+  </div>
+
+  <div id="statusText" class="status-text">대기 중</div>
+
+  <button id="resumeBtn" class="resume-btn">다시 시작</button>
+
+  <div class="controls">
+    <button id="startBtn" class="primary">시작</button>
+    <button id="pauseBtn" class="secondary disabled">일시정지</button>
+    <button id="endBtn" class="danger disabled">종료 후 저장</button>
+    <button id="centerBtn" class="success">내 위치</button>
+  </div>
+
+  <div class="section">
+    <h2>안내</h2>
+    <div class="hint">
+      이 버전은 자동 일시정지 테스트용입니다.<br>
+      75초 동안 거의 이동이 없으면 자동 일시정지됩니다.<br>
+      다시 움직이면 “다시 시작” 버튼이 활성화됩니다.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>저장된 기록</h2>
+    <div id="recordList" class="record-list"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // -----------------------------
+    // 기본 상태
+    // -----------------------------
+    let map;
+    let userMarker = null;
+    let trackLine = null;
+    let savedPreviewLine = null;
+
+    let watchId = null;
+
+    let trackingState = 'idle'; // idle | tracking | paused
+    let autoPaused = false;
+
+    let lastAcceptedPoint = null;
+    let movementCheckStart = null;
+    let stillStartTime = null;
+
+    let startTime = null;
+    let elapsedBeforePause = 0;
+    let timerInterval = null;
+
+    let totalDistanceMeters = 0;
+    let pathPoints = [];
+
+    const STORAGE_KEY = 'walkTrackerV10Records';
+
+    // 자동 일시정지 기준
+    const AUTO_PAUSE_SECONDS = 75;
+    const STILL_DISTANCE_METERS = 8;
+    const RESUME_DISTANCE_METERS = 12;
+
+    // GPS 필터
+    const MAX_ACCEPTABLE_ACCURACY = 35; // m
+    const MIN_MOVE_TO_RECORD = 5;       // m
+    const VEHICLE_SPEED_KMH = 20;       // km/h 이상이면 차량 이동으로 무시
+
+    // -----------------------------
+    // 엘리먼트
+    // -----------------------------
+    const distanceValue = document.getElementById('distanceValue');
+    const timeValue = document.getElementById('timeValue');
+    const modeValue = document.getElementById('modeValue');
+    const statusText = document.getElementById('statusText');
+
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const endBtn = document.getElementById('endBtn');
+    const centerBtn = document.getElementById('centerBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+
+    const recordList = document.getElementById('recordList');
+
+    // -----------------------------
+    // 지도 초기화
+    // -----------------------------
+    function initMap() {
+      map = L.map('map').setView([37.5665, 126.9780], 16);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+
+      trackLine = L.polyline([], {
+        weight: 5,
+        opacity: 0.95
+      }).addTo(map);
+
+      getCurrentLocationAndCenter();
+    }
+
+    function getCurrentLocationAndCenter() {
+      if (!navigator.geolocation) {
+        updateStatus('이 기기에서는 위치 기능을 사용할 수 없습니다.');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setUserMarker(lat, lng);
+          map.setView([lat, lng], 17);
+        },
+        () => {
+          updateStatus('현재 위치를 가져오지 못했습니다.');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    function setUserMarker(lat, lng) {
+      if (!userMarker) {
+        userMarker = L.marker([lat, lng]).addTo(map);
+      } else {
+        userMarker.setLatLng([lat, lng]);
+      }
+    }
+
+    // -----------------------------
+    // 유틸
+    // -----------------------------
+    function updateStatus(message) {
+      statusText.textContent = message;
+    }
+
+    function setModeLabel(text) {
+      modeValue.textContent = text;
+    }
+
+    function showResumeButton(show) {
+      resumeBtn.style.display = show ? 'block' : 'none';
+    }
+
+    function formatDistance(meters) {
+      return (meters / 1000).toFixed(2) + ' km';
+    }
+
+    function formatDuration(ms) {
+      const totalSec = Math.floor(ms / 1000);
+      const min = Math.floor(totalSec / 60);
+      const sec = totalSec % 60;
+      return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    }
+
+    function updateDistanceUI() {
+      distanceValue.textContent = formatDistance(totalDistanceMeters);
+    }
+
+    function updateTimeUI() {
+      let elapsed = elapsedBeforePause;
+      if (trackingState === 'tracking' && startTime) {
+        elapsed += (Date.now() - startTime);
+      }
+      timeValue.textContent = formatDuration(elapsed);
+    }
+
+    function startTimer() {
+      stopTimer();
+      timerInterval = setInterval(updateTimeUI, 1000);
+      updateTimeUI();
+    }
+
+    function stopTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+
+    function getDistanceMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = (deg) => deg * Math.PI / 180;
+
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // -----------------------------
+    // 버튼 상태
+    // -----------------------------
+    function setButtonEnabled(button, enabled) {
+      if (enabled) {
+        button.classList.remove('disabled');
+      } else {
+        button.classList.add('disabled');
+      }
+    }
+
+    function syncButtons() {
+      if (trackingState === 'idle') {
+        setButtonEnabled(startBtn, true);
+        setButtonEnabled(pauseBtn, false);
+        setButtonEnabled(endBtn, false);
+      } else if (trackingState === 'tracking') {
+        setButtonEnabled(startBtn, false);
+        setButtonEnabled(pauseBtn, true);
+        setButtonEnabled(endBtn, true);
+      } else if (trackingState === 'paused') {
+        setButtonEnabled(startBtn, false);
+        setButtonEnabled(pauseBtn, true);
+        setButtonEnabled(endBtn, true);
+      }
+    }
+
+    // -----------------------------
+    // 트래킹 시작/정지
+    // -----------------------------
+    function resetCurrentSession() {
+      lastAcceptedPoint = null;
+      movementCheckStart = null;
+      stillStartTime = null;
+      totalDistanceMeters = 0;
+      pathPoints = [];
+      elapsedBeforePause = 0;
+      startTime = null;
+      autoPaused = false;
+
+      updateDistanceUI();
+      updateTimeUI();
+      trackLine.setLatLngs([]);
+      showResumeButton(false);
+    }
+
+    function startTracking() {
+      resetCurrentSession();
+
+      trackingState = 'tracking';
+      setModeLabel('기록중');
+      updateStatus('산책 기록 중');
+      startTime = Date.now();
+
+      startTimer();
+      syncButtons();
+      startWatch();
+    }
+
+    function manualPauseOrResume() {
+      if (trackingState === 'tracking') {
+        pauseTracking(false);
+      } else if (trackingState === 'paused' && !autoPaused) {
+        resumeTracking();
+      }
+    }
+
+    function pauseTracking(isAuto) {
+      if (trackingState !== 'tracking') return;
+
+      if (startTime) {
+        elapsedBeforePause += (Date.now() - startTime);
+        startTime = null;
+      }
+
+      trackingState = 'paused';
+      autoPaused = isAuto;
+      stillStartTime = null;
+
+      if (lastAcceptedPoint) {
+        movementCheckStart = {
+          lat: lastAcceptedPoint.lat,
+          lng: lastAcceptedPoint.lng,
+          time: Date.now()
+        };
+      }
+
+      stopTimer();
+      updateTimeUI();
+
+      if (isAuto) {
+        setModeLabel('자동정지');
+        updateStatus('휴식 감지됨 · 자동 일시정지');
+        showResumeButton(false);
+      } else {
+        setModeLabel('일시정지');
+        updateStatus('수동 일시정지');
+        showResumeButton(false);
+      }
+
+      pauseBtn.textContent = autoPaused ? '일시정지' : '다시 시작';
+      if (!autoPaused) {
+        pauseBtn.textContent = '다시 시작';
+      } else {
+        pauseBtn.textContent = '일시정지';
+      }
+
+      syncButtons();
+    }
+
+    function resumeTracking() {
+      if (trackingState !== 'paused') return;
+
+      trackingState = 'tracking';
+      autoPaused = false;
+      stillStartTime = null;
+      movementCheckStart = null;
+      startTime = Date.now();
+
+      setModeLabel('기록중');
+      updateStatus('산책 기록 재개');
+      showResumeButton(false);
+
+      startTimer();
+      pauseBtn.textContent = '일시정지';
+      syncButtons();
+    }
+
+    function endTracking() {
+      if (trackingState === 'idle') return;
+
+      if (trackingState === 'tracking' && startTime) {
+        elapsedBeforePause += (Date.now() - startTime);
+      }
+
+      stopTimer();
+      stopWatch();
+
+      const durationMs = elapsedBeforePause;
+      const pointCount = pathPoints.length;
+
+      if (totalDistanceMeters < 0.03 * 1000 || pointCount < 2) {
+        updateStatus('저장할 만큼의 이동 기록이 부족합니다.');
+        trackingState = 'idle';
+        setModeLabel('대기');
+        pauseBtn.textContent = '일시정지';
+        syncButtons();
+        return;
+      }
+
+      const now = new Date();
+      const record = {
+        id: Date.now(),
+        title: `산책 ${new Date().toLocaleString('ko-KR')}`,
+        createdAt: now.toISOString(),
+        distanceMeters: totalDistanceMeters,
+        durationMs: durationMs,
+        path: pathPoints
+      };
+
+      saveRecord(record);
+
+      trackingState = 'idle';
+      setModeLabel('대기');
+      pauseBtn.textContent = '일시정지';
+      updateStatus('기록이 저장되었습니다.');
+      syncButtons();
+
+      renderRecordList();
+    }
+
+    function startWatch() {
+      if (!navigator.geolocation) {
+        updateStatus('위치 기능을 사용할 수 없습니다.');
+        return;
+      }
+
+      stopWatch();
+
+      watchId = navigator.geolocation.watchPosition(
+        handlePositionUpdate,
+        (err) => {
+          console.log(err);
+          updateStatus('위치 추적 중 오류가 발생했습니다.');
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 15000
+        }
+      );
+    }
+
+    function stopWatch() {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+    }
+
+    // -----------------------------
+    // 위치 업데이트 핵심
+    // -----------------------------
+    function handlePositionUpdate(position) {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const accuracy = position.coords.accuracy ?? 999;
+      const speedMps = position.coords.speed ?? 0;
+      const speedKmh = speedMps > 0 ? speedMps * 3.6 : 0;
+      const now = Date.now();
+
+      setUserMarker(lat, lng);
+
+      const currentPoint = { lat, lng, time: now };
+
+      // 지도는 현재 위치 따라가게
+      if (trackingState !== 'idle') {
+        map.panTo([lat, lng], { animate: true });
+      }
+
+      // GPS 정확도 너무 나쁘면 무시
+      if (accuracy > MAX_ACCEPTABLE_ACCURACY) {
+        return;
+      }
+
+      // 차량급 속도면 무시
+      if (speedKmh >= VEHICLE_SPEED_KMH) {
+        updateStatus('차량 이동으로 보이는 속도 감지 · 기록 제외');
+        return;
+      }
+
+      // 첫 점 설정
+      if (!lastAcceptedPoint) {
+        lastAcceptedPoint = currentPoint;
+        pathPoints.push([lat, lng]);
+        trackLine.setLatLngs(pathPoints);
+        return;
+      }
+
+      const moved = getDistanceMeters(
+        lastAcceptedPoint.lat,
+        lastAcceptedPoint.lng,
+        currentPoint.lat,
+        currentPoint.lng
+      );
+
+      // tracking 상태
+      if (trackingState === 'tracking') {
+        if (moved <= STILL_DISTANCE_METERS) {
+          if (!stillStartTime) {
+            stillStartTime = now;
+          } else {
+            const stillSeconds = (now - stillStartTime) / 1000;
+            if (stillSeconds >= AUTO_PAUSE_SECONDS) {
+              pauseTracking(true);
+              movementCheckStart = currentPoint;
+              return;
+            }
+          }
+          return;
+        }
+
+        // 다시 움직이면 정지 감지 리셋
+        stillStartTime = null;
+
+        // 너무 짧은 튐은 무시
+        if (moved < MIN_MOVE_TO_RECORD) {
+          return;
+        }
+
+        totalDistanceMeters += moved;
+        updateDistanceUI();
+
+        pathPoints.push([lat, lng]);
+        trackLine.setLatLngs(pathPoints);
+
+        lastAcceptedPoint = currentPoint;
+      }
+
+      // paused 상태
+      else if (trackingState === 'paused') {
+        if (autoPaused && movementCheckStart) {
+          const resumeMoved = getDistanceMeters(
+            movementCheckStart.lat,
+            movementCheckStart.lng,
+            currentPoint.lat,
+            currentPoint.lng
+          );
+
+          if (resumeMoved >= RESUME_DISTANCE_METERS) {
+            updateStatus('움직임 감지됨 · 다시 시작 버튼을 눌러주세요');
+            setModeLabel('재개대기');
+            showResumeButton(true);
+          }
+        }
+      }
+    }
+
+    // -----------------------------
+    // 저장 / 불러오기
+    // -----------------------------
+    function getRecords() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveRecord(record) {
+      const records = getRecords();
+      records.unshift(record);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    }
+
+    function deleteRecord(id) {
+      const records = getRecords().filter(r => r.id !== id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      renderRecordList();
+
+      if (savedPreviewLine) {
+        map.removeLayer(savedPreviewLine);
+        savedPreviewLine = null;
+      }
+    }
+
+    function previewRecordPath(record) {
+      if (savedPreviewLine) {
+        map.removeLayer(savedPreviewLine);
+      }
+
+      savedPreviewLine = L.polyline(record.path, {
+        weight: 5,
+        dashArray: '8, 8',
+        opacity: 0.85
+      }).addTo(map);
+
+      try {
+        map.fitBounds(savedPreviewLine.getBounds(), { padding: [20, 20] });
+      } catch (e) {}
+    }
+
+    function renderRecordList() {
+      const records = getRecords();
+
+      if (!records.length) {
+        recordList.innerHTML = `<div class="hint">저장된 기록이 없습니다.</div>`;
+        return;
+      }
+
+      recordList.innerHTML = '';
+
+      records.forEach(record => {
+        const item = document.createElement('div');
+        item.className = 'record-item';
+
+        const created = new Date(record.createdAt).toLocaleString('ko-KR');
+        const distance = formatDistance(record.distanceMeters);
+        const duration = formatDuration(record.durationMs);
+
+        item.innerHTML = `
+          <div class="record-top">
+            <div class="record-title">${record.title}</div>
+          </div>
+          <div class="record-meta">날짜: ${created}
+거리: ${distance}
+시간: ${duration}</div>
+          <div class="record-actions">
+            <button class="small-btn secondary view-btn">지도 보기</button>
+            <button class="small-btn danger delete-btn">삭제</button>
+          </div>
+        `;
+
+        item.querySelector('.view-btn').addEventListener('click', () => {
+          previewRecordPath(record);
+        });
+
+        item.querySelector('.delete-btn').addEventListener('click', () => {
+          if (confirm('이 기록을 삭제할까요?')) {
+            deleteRecord(record.id);
+          }
+        });
+
+        recordList.appendChild(item);
+      });
+    }
+
+    // -----------------------------
+    // 이벤트
+    // -----------------------------
+    startBtn.addEventListener('click', startTracking);
+
+    pauseBtn.addEventListener('click', () => {
+      if (trackingState === 'tracking') {
+        pauseTracking(false);
+        pauseBtn.textContent = '다시 시작';
+      } else if (trackingState === 'paused' && !autoPaused) {
+        resumeTracking();
+        pauseBtn.textContent = '일시정지';
+      }
+    });
+
+    endBtn.addEventListener('click', endTracking);
+
+    centerBtn.addEventListener('click', getCurrentLocationAndCenter);
+
+    resumeBtn.addEventListener('click', () => {
+      resumeTracking();
+      pauseBtn.textContent = '일시정지';
+    });
+
+    // -----------------------------
+    // 초기 실행
+    // -----------------------------
+    initMap();
+    syncButtons();
+    updateDistanceUI();
+    updateTimeUI();
+    renderRecordList();
+  </script>
+</body>
+</html>
